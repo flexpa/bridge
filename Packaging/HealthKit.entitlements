@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Only used when HEALTHKIT_ENTITLEMENT=1. HealthKit has no data store on macOS
+	     (see docs/HEALTHKIT-ON-MACOS.md), so shipping builds omit this: it is a
+	     restricted entitlement that would also require an embedded Developer ID
+	     provisioning profile. Turn it on the day Apple ships Health for the Mac. -->
+	<key>com.apple.developer.healthkit</key>
+	<true/>
+	<key>com.apple.developer.healthkit.access</key>
+	<array>
+		<string>health-records</string>
+	</array>
+</dict>
+</plist>

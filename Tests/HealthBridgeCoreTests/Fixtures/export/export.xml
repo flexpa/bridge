@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE HealthData [
+<!ELEMENT HealthData (ExportDate,Me,(Record|Correlation|Workout|ActivitySummary|ClinicalRecord|Audiogram|VisionPrescription)*)>
+<!ATTLIST HealthData locale CDATA #REQUIRED>
+<!ELEMENT ExportDate EMPTY>
+<!ATTLIST ExportDate value CDATA #REQUIRED>
+<!ELEMENT Me EMPTY>
+<!ATTLIST Me HKCharacteristicTypeIdentifierDateOfBirth CDATA #REQUIRED HKCharacteristicTypeIdentifierBiologicalSex CDATA #REQUIRED HKCharacteristicTypeIdentifierBloodType CDATA #REQUIRED HKCharacteristicTypeIdentifierFitzpatrickSkinType CDATA #REQUIRED HKCharacteristicTypeIdentifierCardioFitnessMedicationsUse CDATA #REQUIRED>
+<!ELEMENT Record ((MetadataEntry|HeartRateVariabilityMetadataList)*)>
+<!ATTLIST Record type CDATA #REQUIRED unit CDATA #IMPLIED value CDATA #IMPLIED sourceName CDATA #REQUIRED sourceVersion CDATA #IMPLIED device CDATA #IMPLIED creationDate CDATA #IMPLIED startDate CDATA #REQUIRED endDate CDATA #REQUIRED>
+<!ELEMENT MetadataEntry EMPTY>
+<!ATTLIST MetadataEntry key CDATA #REQUIRED value CDATA #REQUIRED>
+<!ELEMENT Workout ((MetadataEntry|WorkoutEvent|WorkoutRoute|WorkoutStatistics)*)>
+<!ATTLIST Workout workoutActivityType CDATA #REQUIRED duration CDATA #IMPLIED durationUnit CDATA #IMPLIED totalDistance CDATA #IMPLIED totalDistanceUnit CDATA #IMPLIED totalEnergyBurned CDATA #IMPLIED totalEnergyBurnedUnit CDATA #IMPLIED sourceName CDATA #REQUIRED sourceVersion CDATA #IMPLIED device CDATA #IMPLIED creationDate CDATA #IMPLIED startDate CDATA #REQUIRED endDate CDATA #REQUIRED>
+<!ELEMENT WorkoutStatistics EMPTY>
+<!ATTLIST WorkoutStatistics type CDATA #REQUIRED startDate CDATA #REQUIRED endDate CDATA #REQUIRED average CDATA #IMPLIED minimum CDATA #IMPLIED maximum CDATA #IMPLIED sum CDATA #IMPLIED unit CDATA #IMPLIED>
+<!ELEMENT ClinicalRecord EMPTY>
+<!ATTLIST ClinicalRecord type CDATA #REQUIRED identifier CDATA #REQUIRED sourceName CDATA #REQUIRED sourceURL CDATA #REQUIRED fhirVersion CDATA #REQUIRED receivedDate CDATA #REQUIRED resourceFilePath CDATA #REQUIRED>
+]>
+<HealthData locale="en_US">
+ <ExportDate value="2026-09-10 09:15:00 -0400"/>
+ <Me HKCharacteristicTypeIdentifierDateOfBirth="1990-06-15" HKCharacteristicTypeIdentifierBiologicalSex="HKBiologicalSexMale" HKCharacteristicTypeIdentifierBloodType="HKBloodTypeOPositive" HKCharacteristicTypeIdentifierFitzpatrickSkinType="HKFitzpatrickSkinTypeNotSet" HKCharacteristicTypeIdentifierCardioFitnessMedicationsUse="None"/>
+ <Record type="HKQuantityTypeIdentifierStepCount" sourceName="Test Watch" sourceVersion="11.0" device="&lt;&lt;HKDevice: 0x1&gt;, name:Apple Watch, manufacturer:Apple Inc., model:Watch&gt;" unit="count" creationDate="2026-09-01 08:00:00 -0400" startDate="2026-09-01 07:00:00 -0400" endDate="2026-09-01 07:30:00 -0400" value="800"/>
+ <Record type="HKQuantityTypeIdentifierStepCount" sourceName="Test Watch" unit="count" startDate="2026-09-01 09:00:00 -0400" endDate="2026-09-01 09:20:00 -0400" value="1200"/>
+ <Record type="HKQuantityTypeIdentifierStepCount" sourceName="Test Watch" unit="count" startDate="2026-09-02 10:00:00 -0400" endDate="2026-09-02 10:10:00 -0400" value="500"/>
+ <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Test Watch" unit="count/min" startDate="2026-09-01 07:05:00 -0400" endDate="2026-09-01 07:05:00 -0400" value="72">
+  <MetadataEntry key="HKMetadataKeyHeartRateMotionContext" value="1"/>
+ </Record>
+ <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Test Watch" unit="count/min" startDate="2026-09-01 12:00:00 -0400" endDate="2026-09-01 12:00:00 -0400" value="88"/>
+ <Record type="HKQuantityTypeIdentifierBodyMass" sourceName="Test Scale" unit="lb" startDate="2026-09-01 06:30:00 -0400" endDate="2026-09-01 06:30:00 -0400" value="176.37"/>
+ <Record type="HKQuantityTypeIdentifierDistanceWalkingRunning" sourceName="Test Watch" unit="mi" startDate="2026-09-01 07:00:00 -0400" endDate="2026-09-01 07:30:00 -0400" value="0.5"/>
+ <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Test Watch" startDate="2026-08-31 23:00:00 -0400" endDate="2026-09-01 06:00:00 -0400" value="HKCategoryValueSleepAnalysisInBed"/>
+ <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Test Watch" startDate="2026-08-31 23:10:00 -0400" endDate="2026-09-01 01:10:00 -0400" value="HKCategoryValueSleepAnalysisAsleepCore"/>
+ <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Test Watch" startDate="2026-09-01 01:10:00 -0400" endDate="2026-09-01 02:10:00 -0400" value="HKCategoryValueSleepAnalysisAsleepDeep"/>
+ <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Test Watch" startDate="2026-09-01 02:10:00 -0400" endDate="2026-09-01 02:20:00 -0400" value="HKCategoryValueSleepAnalysisAwake"/>
+ <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Test Watch" startDate="2026-09-01 02:20:00 -0400" endDate="2026-09-01 05:50:00 -0400" value="HKCategoryValueSleepAnalysisAsleepREM"/>
+ <Record type="HKCategoryTypeIdentifierAppleStandHour" sourceName="Test Watch" startDate="2026-09-01 07:00:00 -0400" endDate="2026-09-01 08:00:00 -0400" value="HKCategoryValueAppleStandHourStood"/>
+ <Record type="HKCategoryTypeIdentifierAppleStandHour" sourceName="Test Watch" startDate="2026-09-01 08:00:00 -0400" endDate="2026-09-01 09:00:00 -0400" value="HKCategoryValueAppleStandHourIdle"/>
+ <Record type="HKQuantityTypeIdentifierSomethingUnknown" sourceName="Test" unit="count" startDate="2026-09-01 07:00:00 -0400" endDate="2026-09-01 07:00:00 -0400" value="1"/>
+ <Workout workoutActivityType="HKWorkoutActivityTypeRunning" duration="31.5" durationUnit="min" sourceName="Test Watch" startDate="2026-09-01 17:00:00 -0400" endDate="2026-09-01 17:31:30 -0400">
+  <WorkoutStatistics type="HKQuantityTypeIdentifierActiveEnergyBurned" startDate="2026-09-01 17:00:00 -0400" endDate="2026-09-01 17:31:30 -0400" sum="312.4" unit="Cal"/>
+  <WorkoutStatistics type="HKQuantityTypeIdentifierDistanceWalkingRunning" startDate="2026-09-01 17:00:00 -0400" endDate="2026-09-01 17:31:30 -0400" sum="3.1" unit="mi"/>
+  <WorkoutStatistics type="HKQuantityTypeIdentifierHeartRate" startDate="2026-09-01 17:00:00 -0400" endDate="2026-09-01 17:31:30 -0400" average="152" minimum="110" maximum="178" unit="count/min"/>
+  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Test Watch" unit="count/min" startDate="2026-09-01 17:10:00 -0400" endDate="2026-09-01 17:10:00 -0400" value="150"/>
+ </Workout>
+ <ClinicalRecord type="HKClinicalTypeIdentifierLabResultRecord" identifier="obs-1" sourceName="Test Hospital" sourceURL="https://fhir.example.org/Observation/obs-1" fhirVersion="4.0.1" receivedDate="2026-08-20 10:00:00 -0400" resourceFilePath="/clinical-records/Observation-obs-1.json"/>
+</HealthData>

@@ -1,0 +1,162 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v0.1.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Resolve version and check it matches the source
+        id: version
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${TAG#v}"
+          SOURCE_VERSION="$(sed -n 's/.*public static let version = "\(.*\)".*/\1/p' Sources/HealthBridgeCore/MCP/MCPServer.swift)"
+          if [ "$VERSION" != "$SOURCE_VERSION" ]; then
+            echo "::error::Tag $TAG implies version $VERSION but BridgeInfo.version is $SOURCE_VERSION. Bump one of them."
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check the signing secrets are present
+        run: |
+          missing=""
+          for name in MACOS_CERTIFICATE_P12 MACOS_CERTIFICATE_PASSWORD MACOS_SIGNING_IDENTITY \
+                      NOTARY_PRIVATE_KEY NOTARY_KEY_ID NOTARY_ISSUER_ID; do
+            eval "value=\${$name}"
+            [ -n "$value" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing"
+            echo "Run scripts/setup-signing.sh (see docs/RELEASING.md) and tag again."
+            exit 1
+          fi
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          NOTARY_PRIVATE_KEY: ${{ secrets.NOTARY_PRIVATE_KEY }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+
+      - name: Test
+        run: swift test
+
+      - name: Import the Developer ID certificate
+        env:
+          CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          CODESIGN_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+        run: |
+          # An ephemeral keychain keeps the key off the runner's login keychain and
+          # dies with the job.
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          echo "$CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/cert.p12"
+
+          # `security import` reports success even when the identity ends up unusable
+          # (a .p12 without its private key, or one whose chain the runner cannot build).
+          # Assert it here so the failure names the cause, rather than surfacing later as
+          # a confusing codesign error halfway through the build.
+          security find-identity -v -p codesigning "$KEYCHAIN"
+          if ! security find-identity -v -p codesigning "$KEYCHAIN" | grep -q "$CODESIGN_IDENTITY"; then
+            echo "::error::Imported the certificate but '$CODESIGN_IDENTITY' is not a valid signing identity."
+            echo "Check that MACOS_SIGNING_IDENTITY matches the certificate exactly, that the .p12 contains"
+            echo "the private key, and that it bundles Apple's Developer ID intermediate."
+            exit 1
+          fi
+
+      - name: Build, sign, and package
+        env:
+          CODESIGN_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          scripts/build-app.sh --release --universal
+          scripts/make-dmg.sh
+          # A zip alongside the DMG: some installers and scripts prefer it.
+          ditto -c -k --keepParent "dist/Flexpa Health Bridge.app" \
+            "dist/FlexpaHealthBridge-${VERSION}.zip"
+          lipo -archs "dist/Flexpa Health Bridge.app/Contents/MacOS/HealthBridge"
+
+      - name: Notarize and staple
+        env:
+          NOTARY_KEY: ${{ secrets.NOTARY_PRIVATE_KEY }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          echo "$NOTARY_KEY" > "$RUNNER_TEMP/notary.p8"
+          NOTARY=(--key "$RUNNER_TEMP/notary.p8" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID")
+
+          # Notarize the app (via the zip Apple wants for bundles), then staple the app itself.
+          xcrun notarytool submit "dist/FlexpaHealthBridge-${VERSION}.zip" "${NOTARY[@]}" --wait
+          xcrun stapler staple "dist/Flexpa Health Bridge.app"
+
+          # Rebuild the artifacts so both carry the stapled ticket offline.
+          rm -f "dist/FlexpaHealthBridge-${VERSION}.zip" "dist/FlexpaHealthBridge-${VERSION}.dmg"
+          ditto -c -k --keepParent "dist/Flexpa Health Bridge.app" "dist/FlexpaHealthBridge-${VERSION}.zip"
+          scripts/make-dmg.sh
+          xcrun notarytool submit "dist/FlexpaHealthBridge-${VERSION}.dmg" "${NOTARY[@]}" --wait
+          xcrun stapler staple "dist/FlexpaHealthBridge-${VERSION}.dmg"
+
+          rm -f "$RUNNER_TEMP/notary.p8"
+
+      - name: Verify Gatekeeper accepts it
+        run: |
+          xcrun stapler validate "dist/Flexpa Health Bridge.app"
+          xcrun stapler validate "dist/FlexpaHealthBridge-${{ steps.version.outputs.version }}.dmg"
+          spctl --assess --type execute --verbose=2 "dist/Flexpa Health Bridge.app"
+
+      - name: Checksums
+        id: checksums
+        working-directory: dist
+        run: |
+          shasum -a 256 FlexpaHealthBridge-*.dmg FlexpaHealthBridge-*.zip > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          DMG_SHA="$(shasum -a 256 "FlexpaHealthBridge-${{ steps.version.outputs.version }}.dmg" | cut -d' ' -f1)"
+          echo "dmg_sha256=$DMG_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Publish the GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Flexpa Health Bridge ${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          draft: true
+          files: |
+            dist/FlexpaHealthBridge-${{ steps.version.outputs.version }}.dmg
+            dist/FlexpaHealthBridge-${{ steps.version.outputs.version }}.zip
+            dist/SHA256SUMS.txt
+
+      - name: Update the Homebrew cask
+        if: ${{ secrets.HOMEBREW_TAP_TOKEN != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA256: ${{ steps.checksums.outputs.dmg_sha256 }}
+        run: scripts/update-cask.sh "$VERSION" "$SHA256"

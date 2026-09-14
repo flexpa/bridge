@@ -1,0 +1,15 @@
+.build/
+dist/
+*.xcodeproj
+*.xcworkspace
+.swiftpm/
+.DS_Store
+*.icns
+*.iconset/
+*.dmg
+*.zip
+*.provisionprofile
+.env
+.worktrees/
+*.p12
+*.p8

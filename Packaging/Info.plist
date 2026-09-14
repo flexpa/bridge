@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>Flexpa Health Bridge</string>
+	<key>CFBundleExecutable</key>
+	<string>HealthBridge</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.flexpa.HealthBridge</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Flexpa Health Bridge</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>__VERSION__</string>
+	<key>CFBundleVersion</key>
+	<string>__BUILD__</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.healthcare-fitness</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Flexpa Health Bridge reads your Health data so the agents you pair on this Mac can answer questions about it. Data is served only to agents you approve, only on this Mac.</string>
+	<key>NSHealthClinicalHealthRecordsShareUsageDescription</key>
+	<string>Flexpa Health Bridge reads the clinical records (labs, medications, conditions, immunizations) in Health so the agents you pair can reference them.</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2026 Flexpa. All rights reserved.</string>
+	<key>NSSupportsAutomaticTermination</key>
+	<false/>
+	<key>NSSupportsSuddenTermination</key>
+	<false/>
+</dict>
+</plist>
