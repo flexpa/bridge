@@ -139,8 +139,27 @@ public final class HTTPServer: @unchecked Sendable {
         stateLock.unlock()
     }
 
+    /// True only for a literal loopback address or `localhost`.
+    ///
+    /// This must not prefix-match: `127.evil.com` is a registrable domain that can resolve to
+    /// 127.0.0.1, which is exactly the DNS-rebinding vector the Host and Origin checks exist to
+    /// stop. Anything that is not a valid IP literal is rejected unless it is exactly `localhost`.
     static func isLoopback(_ host: String) -> Bool {
-        host == "127.0.0.1" || host == "::1" || host.hasPrefix("127.") || host == "::ffff:127.0.0.1" || host == "localhost"
+        if host == "localhost" { return true }
+        var name = host
+        if name.hasPrefix("[") && name.hasSuffix("]") { name = String(name.dropFirst().dropLast()) }
+        if let percent = name.firstIndex(of: "%") { name = String(name[..<percent]) }  // IPv6 zone id
+        if name == "::1" { return true }
+        if name.lowercased().hasPrefix("::ffff:") { name = String(name.dropFirst(7)) }
+        // Require four decimal octets, so "127.1" and "0177.0.0.1" do not slip through.
+        let parts = name.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 4 else { return false }
+        for part in parts {
+            guard !part.isEmpty, part.count <= 3, part.allSatisfy(\.isNumber), let value = Int(part), value <= 255 else {
+                return false
+            }
+        }
+        return parts[0] == "127"
     }
 }
 

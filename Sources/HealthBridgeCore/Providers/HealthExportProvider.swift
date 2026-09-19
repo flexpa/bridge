@@ -476,9 +476,7 @@ public final class HealthExportImporter: NSObject, XMLParserDelegate, @unchecked
         var resource: JSONValue = .null
         var resourceType = "Unknown"
         var displayName = kindName
-        if let rel = a["resourceFilePath"] {
-            let trimmed = rel.hasPrefix("/") ? String(rel.dropFirst()) : rel
-            let url = exportRoot.appendingPathComponent(trimmed)
+        if let rel = a["resourceFilePath"], let url = Self.resourceURL(rel, under: exportRoot) {
             if let data = try? Data(contentsOf: url), let parsed = try? JSON.parse(data) {
                 resource = parsed
                 resourceType = parsed["resourceType"]?.stringValue ?? resourceType
@@ -490,6 +488,21 @@ public final class HealthExportImporter: NSObject, XMLParserDelegate, @unchecked
                                   identifier: a["identifier"], sourceURL: a["sourceURL"], source: a["sourceName"], date: date, resource: resource))
         clinicalCount += 1
         commitIfNeeded()
+    }
+
+    /// Resolves a `resourceFilePath` from an imported export against the export directory,
+    /// rejecting anything that escapes it. The path comes from a file the user was handed,
+    /// so `../` chains would otherwise read arbitrary JSON off disk — including this app's
+    /// own pairings file and other agents' configs — and serve it back as a clinical record.
+    static func resourceURL(_ relative: String, under root: URL) -> URL? {
+        let trimmed = relative.hasPrefix("/") ? String(relative.dropFirst()) : relative
+        guard !trimmed.isEmpty else { return nil }
+        let candidate = root.appendingPathComponent(trimmed).standardizedFileURL
+        let base = root.standardizedFileURL
+        var basePath = base.path
+        if !basePath.hasSuffix("/") { basePath += "/" }
+        guard candidate.path.hasPrefix(basePath) else { return nil }
+        return candidate
     }
 
     static func displayName(for resource: JSONValue) -> String? {

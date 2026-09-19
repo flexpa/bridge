@@ -24,7 +24,7 @@ this file covers what the scripts do and how to verify the result by hand.
    `HealthBridge.provisionprofile`. Keep it out of git (`*.provisionprofile` is ignored). Not needed for normal releases.
 4. **Notarization credentials.** An app-specific password for the Apple ID that belongs to the team, stored once:
    ```bash
-   xcrun notarytool store-credentials HealthBridge --apple-id release@flexpa.com --team-id TEAMID
+   xcrun notarytool store-credentials HealthBridge --apple-id the release Apple ID --team-id TEAMID
    ```
 
 ## Build, sign, notarize, package
@@ -35,8 +35,8 @@ export NOTARY_PROFILE=HealthBridge
 
 make release          # swift build (arm64 + x86_64), bundle, embed profile, codesign --options runtime
 make notarize         # zip → notarytool submit --wait → stapler staple → spctl assess
-make dmg              # dist/HealthBridge-<version>.dmg with an Applications alias, signed
-scripts/notarize.sh dist/HealthBridge-*.dmg   # notarize and staple the DMG too
+make dmg              # dist/FlexpaHealthBridge-<version>.dmg with an Applications alias, signed
+scripts/notarize.sh dist/FlexpaHealthBridge-*.dmg   # notarize and staple the DMG too
 ```
 
 Version comes from `BridgeInfo.version`; override with `VERSION=0.2.0 BUILD_NUMBER=42`.
@@ -59,7 +59,7 @@ and publish its SHA-256 next to it. Because the ticket is stapled, first launch 
 
 ```bash
 spctl --assess --type execute --verbose=2 "/Applications/Flexpa Health Bridge.app"   # accepted, source=Notarized Developer ID
-codesign -dv --entitlements - "/Applications/Flexpa Health Bridge.app"               # shows healthkit entitlements
+codesign -dv --entitlements - "/Applications/Flexpa Health Bridge.app"   # empty entitlement set, by design
 xcrun stapler validate "/Applications/Flexpa Health Bridge.app"
 ```
 

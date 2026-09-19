@@ -36,9 +36,11 @@ if [[ "$TARGET" == *.app ]]; then
 fi
 
 echo "▸ submitting to Apple notary service (waits for the result)"
-xcrun notarytool submit "$SUBMIT" "${AUTH[@]}" --wait --output-format plist > /tmp/healthbridge-notary.plist
-STATUS="$(/usr/libexec/PlistBuddy -c 'Print :status' /tmp/healthbridge-notary.plist)"
-ID="$(/usr/libexec/PlistBuddy -c 'Print :id' /tmp/healthbridge-notary.plist)"
+RESULT="$(mktemp -t healthbridge-notary)"
+trap 'rm -f "$RESULT"' EXIT
+xcrun notarytool submit "$SUBMIT" "${AUTH[@]}" --wait --output-format plist > "$RESULT"
+STATUS="$(/usr/libexec/PlistBuddy -c 'Print :status' "$RESULT")"
+ID="$(/usr/libexec/PlistBuddy -c 'Print :id' "$RESULT")"
 echo "  submission $ID: $STATUS"
 if [ "$STATUS" != "Accepted" ]; then
   xcrun notarytool log "$ID" "${AUTH[@]}"

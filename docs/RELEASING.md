@@ -65,7 +65,15 @@ it survives password changes and staff turnover.
 | `NOTARY_PRIVATE_KEY` | contents of the `.p8`, including the BEGIN/END lines |
 | `NOTARY_KEY_ID` | the key's ID |
 | `NOTARY_ISSUER_ID` | the issuer UUID |
-| `HOMEBREW_TAP_TOKEN` | fine-grained PAT with contents write on `flexpa/homebrew-tap`; omit to skip the cask step |
+| `HOMEBREW_TAP_TOKEN` | fine-grained PAT with contents write on `flexpa/homebrew-tap` only; omit to skip the cask step |
+
+### 4. Homebrew tap (once)
+
+CI never creates repositories, so that the tap token can stay scoped to a single repo:
+
+```bash
+gh repo create flexpa/homebrew-tap --public --description "Homebrew tap for Flexpa"
+```
 
 ## Cutting a release
 
@@ -89,7 +97,9 @@ gh release view v0.1.0 --json assets --jq '.assets[].name'
 gh release edit v0.1.0 --draft=false
 ```
 
-6. Confirm Homebrew: `brew update && brew info --cask flexpa/tap/flexpa-health-bridge`.
+6. Publishing the release triggers the cask workflow, which downloads the published DMG, takes its
+   checksum from the file the public actually gets, and pushes the cask. Confirm:
+   `brew update && brew info --cask flexpa/tap/flexpa-health-bridge`.
 
 ## Cutting one by hand
 

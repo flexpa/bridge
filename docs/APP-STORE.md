@@ -32,12 +32,10 @@ agents. Revisit only if Apple makes peer code-signature checks available to sand
 
 ## iOS: the App Store target that matters
 
-HealthKit only has a data store on the iPhone, so live health data requires an iOS app. That work is already
-designed as a node in the Flexpa monorepo — see `docs/decisions/11-healthkit-bridge.md` on the
-`feat/healthkit-bridge` branch — and it has somewhere to land: `apps/app` is already on the App Store as **Flexpa**
-(`ascAppId` 6761062773), already declares health data in its privacy manifest, and already ships through EAS.
+HealthKit only has a data store on the iPhone, so live health data requires an iOS app. Flexpa already ships one,
+which is where this belongs rather than in a new app.
 
-What it adds: a Swift Expo module that reads HealthKit with background delivery and anchored queries, and pushes
+What it adds: a native module that reads HealthKit with background delivery and anchored queries, and pushes
 incremental batches to the Mac bridge over the local network. The Mac stays the gateway; the phone is a push-only
 node.
 
@@ -59,7 +57,7 @@ Expect at least one round trip. Budget for it.
 
 1. Ship the Mac bridge (Developer ID, Homebrew). Backup import already gives it real data.
 2. Build the iOS module behind a feature flag; validate on a development build.
-3. TestFlight — up to 10,000 external testers, lighter Beta App Review — with Flexpa customers.
+3. TestFlight, which allows up to 10,000 external testers under a lighter Beta App Review.
 4. Submit to the App Store once the sync engine has survived real phones.
 
-Full design, milestones, and open questions are in the monorepo decision record.
+The detailed design lives with the iOS app.

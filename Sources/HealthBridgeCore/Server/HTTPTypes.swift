@@ -130,6 +130,11 @@ public struct HTTPRequestParser {
 
     public mutating func feed(_ data: Data) throws -> Output {
         buffer.append(data)
+        // The decoded-body limit alone is not enough: raw bytes accumulate here while a chunk is
+        // still arriving, so a single declared 500 MB chunk, or a chunk-size line with no CRLF,
+        // would grow this without bound before any size check ran. Parsing happens before auth,
+        // so any process able to open a loopback socket could exhaust memory.
+        if buffer.count > maxBodySize + maxHeadSize { throw HTTPParseError.bodyTooLarge }
         var out = Output()
         while true {
             switch state {
@@ -173,7 +178,12 @@ public struct HTTPRequestParser {
                 // Parse as many chunks as are complete.
                 var progressed = false
                 chunkLoop: while true {
-                    guard let lineEnd = buffer.range(of: Data("\r\n".utf8)) else { break }
+                    guard let lineEnd = buffer.range(of: Data("\r\n".utf8)) else {
+                        // No terminator yet. A chunk-size line is a handful of bytes; anything
+                        // longer is malformed and must not be buffered indefinitely.
+                        if buffer.count > 1024 { throw HTTPParseError.badChunk }
+                        break
+                    }
                     let sizeLine = String(decoding: buffer.subdata(in: 0..<lineEnd.lowerBound), as: UTF8.self)
                     let sizeHex = sizeLine.split(separator: ";").first.map(String.init) ?? ""
                     guard let size = Int(sizeHex.trimmingCharacters(in: .whitespaces), radix: 16) else {

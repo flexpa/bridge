@@ -45,12 +45,13 @@ public struct ToolArgs: Sendable {
     /// Parses `start`/`end`. Missing end defaults to now; missing start defaults
     /// to `defaultDays` before end. Caps the span at `maxDays` when given.
     public func range(defaultDays: Int, maxDays: Int? = nil) throws -> DateInterval {
-        let end = try date("end") ?? now
-        var start = try date("start") ?? Calendar.current.date(byAdding: .day, value: -defaultDays, to: end)!
-        if let endOnly = string("end"), endOnly.count == 10, string("start") == nil {
-            // A bare date for `end` means the whole of that day.
-            start = Calendar.current.date(byAdding: .day, value: -defaultDays, to: end)!
+        var end = try date("end") ?? now
+        // `end` is exclusive, so a bare `YYYY-MM-DD` would otherwise drop that entire day:
+        // an agent asking for data "through the 2nd" would get nothing for the 2nd.
+        if let raw = string("end"), raw.count == 10, ISO8601.date(from: raw) != nil {
+            end = Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: end)) ?? end
         }
+        let start = try date("start") ?? Calendar.current.date(byAdding: .day, value: -defaultDays, to: end)!
         guard start <= end else { throw HealthDataError.invalidArgument("'start' must be before 'end'") }
         if let maxDays, end.timeIntervalSince(start) > Double(maxDays) * 86400 + 1 {
             throw HealthDataError.invalidArgument("Range may not exceed \(maxDays) days")

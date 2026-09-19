@@ -38,12 +38,14 @@ Both stream into the same SQLite store and serve the same MCP tools.
 
 ## Install
 
+Download the notarized DMG from [the latest release](https://github.com/flexpa/bridge/releases/latest) and drag the
+app to Applications. Requires macOS 14 or later, Apple silicon or Intel.
+
+Homebrew, once the first release is published:
+
 ```sh
 brew install --cask flexpa/tap/flexpa-health-bridge
 ```
-
-Or download the notarized DMG from [the latest release](https://github.com/flexpa/bridge/releases/latest) and drag
-the app to Applications. Requires macOS 14 or later, Apple silicon or Intel.
 
 Then:
 

@@ -393,8 +393,12 @@ enum DailySummaryBuilder {
         let vD = byDay(v), rD = byDay(r), oD = byDay(o), mD = byDay(m)
         var standByDay: [String: Double] = [:]
         for sample in stand where sample.value == 0 { standByDay[ISO8601.dayString(sample.start), default: 0] += 1 }
+        // A day can hold several sleep groups: a night plus a nap, or a night the watch split.
+        // Keep the longest, so a twenty-minute nap cannot replace eight hours of sleep.
         var nightsByDay: [String: SleepNight] = [:]
-        for n in nights { nightsByDay[n.date] = n }
+        for n in nights where (nightsByDay[n.date]?.asleepMinutes ?? -1) < n.asleepMinutes {
+            nightsByDay[n.date] = n
+        }
 
         var result: [DailySummary] = []
         var cursor = range.start

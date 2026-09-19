@@ -162,10 +162,13 @@ public final class BackupDecryptor {
     /// A stand-in class decodes just the two keys we need.
     static func parseFileRecord(_ blob: Data?) -> (Int?, Data?) {
         guard let blob, let unarchiver = try? NSKeyedUnarchiver(forReadingFrom: blob) else { return (nil, nil) }
-        unarchiver.requiresSecureCoding = false
+        // Secure coding stays on and the class list stays closed. This blob comes from a
+        // Manifest.db the imported backup controls, and an unrestricted decode would let it
+        // name arbitrary classes and run their initWithCoder:.
+        unarchiver.requiresSecureCoding = true
         unarchiver.setClass(MBFileStub.self, forClassName: "MBFile")
-        guard let file = unarchiver.decodeObject(of: [MBFileStub.self, NSData.self, NSNumber.self, NSString.self, NSDate.self], forKey: "root") as? MBFileStub
-            ?? unarchiver.decodeObject(forKey: "root") as? MBFileStub else { return (nil, nil) }
+        let allowed: [AnyClass] = [MBFileStub.self, NSData.self, NSNumber.self, NSString.self, NSDate.self]
+        guard let file = unarchiver.decodeObject(of: allowed, forKey: "root") as? MBFileStub else { return (nil, nil) }
         return (file.size, file.encryptionKey)
     }
 

@@ -88,6 +88,9 @@ public final class HealthDBReader {
     }
 
     /// Source names by `data_provenances` row, when the plain database is attached.
+    ///
+    /// Touch this (and `unitStrings`) only outside `SQLiteDatabase.withLock`: both query the same
+    /// connection, and the lock is not recursive.
     private lazy var sourceNames: [Int: String] = {
         guard schema.hasDataProvenances else { return [:] }
         var out: [Int: String] = [:]
@@ -189,6 +192,9 @@ public final class HealthDBReader {
 
     public func workouts() throws -> [RawWorkout] {
         guard let workoutCode = codes.code(for: TypeCodeTable.workoutIdentifier) else { return [] }
+        // Force the lazy lookup table before `db.query` takes the connection lock: resolving it
+        // inside the row closure would re-enter the same non-recursive lock and deadlock.
+        let sources = sourceNames
         var out: [RawWorkout] = []
         if schema.hasWorkoutActivities {
             // iOS 16+: one workout row in samples/objects, activities and statistics in side tables.
@@ -205,7 +211,7 @@ public final class HealthDBReader {
                 let start = Self.date(s.double(1)), end = Self.date(s.double(2))
                 return (s.int(0) ?? -1, RawWorkout(uuid: s.uuidString(3), activityType: s.int(5) ?? 3000, start: start, end: end,
                                                    durationSeconds: s.double(6) ?? end.timeIntervalSince(start),
-                                                   source: s.int(4).flatMap { sourceNames[$0] }))
+                                                   source: s.int(4).flatMap { sources[$0] }))
             })
             let stats = schema.hasWorkoutStatistics ? try workoutStatistics(ownerColumn: owner) : [:]
             for (dataID, var w) in rows {
@@ -230,7 +236,7 @@ public final class HealthDBReader {
                 let start = Self.date(s.double(0)), end = Self.date(s.double(1))
                 return RawWorkout(uuid: s.uuidString(2), activityType: s.int(4) ?? 3000, start: start, end: end,
                                   durationSeconds: s.double(5) ?? end.timeIntervalSince(start), energyKcal: s.double(6),
-                                  distanceMeters: s.double(7), source: s.int(3).flatMap { sourceNames[$0] })
+                                  distanceMeters: s.double(7), source: s.int(3).flatMap { sources[$0] })
             })
         }
         return out

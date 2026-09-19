@@ -91,22 +91,27 @@ public enum HealthMath {
         for s in samples {
             switch type.aggregation {
             case .cumulative:
-                // Distribute across the buckets the sample overlaps.
+                // Distribute across the buckets the sample overlaps, visiting only those.
+                // Scanning every bucket per sample is quadratic: a ten-year daily query over a
+                // real step history is 3,600 buckets times hundreds of thousands of samples,
+                // which takes minutes and blocks a cooperative thread the whole time.
                 let total = max(s.end.timeIntervalSince(s.start), 0)
-                for i in 0..<(boundaries.count - 1) {
-                    let bStart = boundaries[i], bEnd = boundaries[i + 1]
-                    let overlapStart = max(bStart, s.start)
-                    let overlapEnd = min(bEnd, s.end)
-                    if total == 0 {
-                        if s.start >= bStart && s.start < bEnd {
-                            sums[i] += s.value
-                            counts[i] += 1
-                        }
-                    } else if overlapEnd > overlapStart {
-                        let fraction = overlapEnd.timeIntervalSince(overlapStart) / total
-                        sums[i] += s.value * fraction
+                if total == 0 {
+                    if let i = bucketIndex(for: s.start, boundaries: boundaries) {
+                        sums[i] += s.value
                         counts[i] += 1
                     }
+                    continue
+                }
+                var i = firstBucket(endingAfter: s.start, boundaries: boundaries)
+                while i < boundaries.count - 1, boundaries[i] < s.end {
+                    let overlapStart = max(boundaries[i], s.start)
+                    let overlapEnd = min(boundaries[i + 1], s.end)
+                    if overlapEnd > overlapStart {
+                        sums[i] += s.value * (overlapEnd.timeIntervalSince(overlapStart) / total)
+                        counts[i] += 1
+                    }
+                    i += 1
                 }
             case .discrete:
                 guard let i = bucketIndex(for: s.start, boundaries: boundaries) else { continue }
@@ -133,6 +138,26 @@ public enum HealthMath {
         return result
     }
 
+    /// Total minutes covered by a set of intervals, counting overlap once.
+    static func unionMinutes(_ intervals: [(Date, Date)]) -> Double {
+        guard !intervals.isEmpty else { return 0 }
+        let sorted = intervals.sorted { $0.0 < $1.0 }
+        var total: TimeInterval = 0
+        var currentStart = sorted[0].0
+        var currentEnd = sorted[0].1
+        for (start, end) in sorted.dropFirst() {
+            if start <= currentEnd {
+                currentEnd = Swift.max(currentEnd, end)
+            } else {
+                total += currentEnd.timeIntervalSince(currentStart)
+                currentStart = start
+                currentEnd = end
+            }
+        }
+        total += currentEnd.timeIntervalSince(currentStart)
+        return total / 60
+    }
+
     static func alignedStart(of date: Date, interval: StatisticsInterval, calendar: Calendar) -> Date {
         switch interval {
         case .hour:
@@ -145,6 +170,23 @@ public enum HealthMath {
         case .month:
             return calendar.dateInterval(of: .month, for: date)?.start ?? calendar.startOfDay(for: date)
         }
+    }
+
+    /// Index of the first bucket whose end is after `date`, clamped to the array.
+    /// Buckets before it cannot overlap anything starting at `date`.
+    private static func firstBucket(endingAfter date: Date, boundaries: [Date]) -> Int {
+        var lo = 0, hi = boundaries.count - 2
+        var answer = boundaries.count - 1
+        while lo <= hi {
+            let mid = (lo + hi) / 2
+            if boundaries[mid + 1] > date {
+                answer = mid
+                hi = mid - 1
+            } else {
+                lo = mid + 1
+            }
+        }
+        return answer
     }
 
     private static func bucketIndex(for date: Date, boundaries: [Date]) -> Int? {
@@ -170,18 +212,26 @@ public enum HealthMath {
                               calendar: Calendar = .current) -> [SleepNight] {
         let sorted = segments.sorted { $0.start < $1.start }
         var groups: [[SleepSegment]] = []
+        // Compare against the furthest end seen in the group, not the last one appended: segments
+        // are ordered by start, so a short segment can otherwise make a long one look finished and
+        // split a single night in two.
+        var groupEnd: Date?
         for seg in sorted {
-            if let last = groups.last?.last, seg.start.timeIntervalSince(last.end) <= gap {
+            if let end = groupEnd, seg.start.timeIntervalSince(end) <= gap {
                 groups[groups.count - 1].append(seg)
+                groupEnd = Swift.max(end, seg.end)
             } else {
                 groups.append([seg])
+                groupEnd = seg.end
             }
         }
         return groups.map { group in
             let bedtime = group.map(\.start).min()!
             let wake = group.map(\.end).max()!
+            // Union rather than sum. A person wearing a watch and a ring has two sources writing
+            // the same night, and adding their segments reports roughly double the real time.
             func minutes(_ stages: Set<SleepStage>) -> Double {
-                group.filter { stages.contains($0.stage) }.reduce(0) { $0 + $1.minutes }
+                unionMinutes(group.filter { stages.contains($0.stage) }.map { ($0.start, $0.end) })
             }
             let staged = minutes([.asleepCore, .asleepDeep, .asleepREM])
             let unspecified = minutes([.asleepUnspecified])

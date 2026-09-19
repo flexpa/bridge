@@ -31,7 +31,7 @@ done
 
 IDENTITY="${CODESIGN_IDENTITY:--}"
 VERSION="${VERSION:-$(sed -n 's/.*public static let version = "\(.*\)".*/\1/p' Sources/HealthBridgeCore/MCP/MCPServer.swift)}"
-BUILD_NUMBER="${BUILD_NUMBER:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}"
+BUILD_NUMBER="${BUILD_NUMBER:-$VERSION}"
 APP="$ROOT/dist/Flexpa Health Bridge.app"
 
 echo "▸ swift build ($CONFIG$([ "$UNIVERSAL" = 1 ] && echo ', universal'))"
@@ -58,6 +58,9 @@ fi
 cp Packaging/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 SIGN_ARGS=(--force --sign "$IDENTITY" --identifier com.flexpa.HealthBridge)
+# CI keeps the Developer ID in a keychain outside the default search list so no other step
+# can sign with it; name it explicitly here.
+[ -n "${SIGNING_KEYCHAIN:-}" ] && SIGN_ARGS+=(--keychain "$SIGNING_KEYCHAIN")
 if [ "$IDENTITY" = "-" ]; then
   echo "▸ codesign (ad-hoc, local use only)"
 else

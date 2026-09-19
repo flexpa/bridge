@@ -1,0 +1,50 @@
+name: Homebrew cask
+
+# Runs when a release is PUBLISHED, not when it is created. The release workflow leaves a draft,
+# and a draft's assets are not served at the public download URL the cask points at, so updating
+# the cask any earlier publishes a formula that cannot install.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Published release tag to sync the cask to (e.g. v0.1.0)'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  cask:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Sync the cask to the published release
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          RAW_TAG: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::notice::HOMEBREW_TAP_TOKEN is not set; skipping the cask update."
+            exit 0
+          fi
+          if [[ ! "$RAW_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Refusing tag '$RAW_TAG'. Expected vMAJOR.MINOR.PATCH."
+            exit 1
+          fi
+          VERSION="${RAW_TAG#v}"
+          DMG="FlexpaHealthBridge-${VERSION}.dmg"
+
+          # Take the checksum from the asset the public actually downloads, not from a local
+          # build, so the cask can never pin a hash that disagrees with the published file.
+          curl -fsSL -o "$DMG" "https://github.com/${REPO}/releases/download/${RAW_TAG}/${DMG}"
+          SHA256="$(shasum -a 256 "$DMG" | cut -d' ' -f1)"
+          echo "$DMG → $SHA256"
+
+          scripts/update-cask.sh "$VERSION" "$SHA256"

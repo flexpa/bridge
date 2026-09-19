@@ -22,10 +22,13 @@ dmg:              ## Package dist/Flexpa Health Bridge.app into a DMG
 notarize:         ## Notarize and staple the app (set NOTARY_PROFILE)
 	scripts/notarize.sh "dist/Flexpa Health Bridge.app"
 
-cask:             ## Publish the Homebrew cask for the current version (needs gh auth)
-	@VERSION="$$(sed -n 's/.*public static let version = "\(.*\)".*/\1/p' Sources/HealthBridgeCore/MCP/MCPServer.swift); \
-	 SHA="$$(shasum -a 256 dist/FlexpaHealthBridge-$$VERSION.dmg | cut -d' ' -f1)"; \
-	 scripts/update-cask.sh "$$VERSION" "$$SHA"
+cask:             ## Publish the Homebrew cask for the built DMG (needs gh auth)
+	@set -e; \
+	version=$$(sed -n 's/.*public static let version = "\(.*\)".*/\1/p' Sources/HealthBridgeCore/MCP/MCPServer.swift); \
+	dmg="dist/FlexpaHealthBridge-$$version.dmg"; \
+	test -f "$$dmg" || { echo "missing $$dmg — run: make release && make dmg" >&2; exit 1; }; \
+	sha=$$(shasum -a 256 "$$dmg" | cut -d' ' -f1); \
+	scripts/update-cask.sh "$$version" "$$sha"
 
 icon:             ## Re-render Packaging/AppIcon.icns
 	swift scripts/make-icon.swift Packaging/AppIcon.icns

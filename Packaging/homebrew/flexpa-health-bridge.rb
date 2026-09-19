@@ -17,10 +17,15 @@ cask "flexpa-health-bridge" do
 
   app "Flexpa Health Bridge.app"
 
-  uninstall quit: "com.flexpa.HealthBridge"
+  uninstall quit:       "com.flexpa.HealthBridge",
+            launchctl:  "com.flexpa.HealthBridge"
 
   # Pairings, settings, the audit log, and the imported Health store. Left in place on
   # uninstall so an upgrade keeps them; `brew uninstall --zap` removes them.
+  #
+  # Homebrew cannot delete keychain items, so a remembered iPhone backup password survives a
+  # zap. Remove it first if you want it gone:
+  #   security delete-generic-password -s com.flexpa.HealthBridge.backup-password
   zap trash: [
     "~/Library/Application Support/HealthBridge",
     "~/Library/Preferences/com.flexpa.HealthBridge.plist",

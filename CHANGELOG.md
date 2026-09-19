@@ -5,7 +5,7 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.1.0] — unreleased
+## [0.1.0] — 2026-09-19
 
 First public release.
 
@@ -26,6 +26,15 @@ First public release.
 - Append-only audit log of every request, allowed or refused, visible in the panel.
 - A Full Disk Access helper window that follows the grant and returns you to where you were.
 - Command line: `--pair`, `--list`, `--revoke`, `--reset-binding`, `--import`, `--list-backups`, `--import-backup`.
+
+### Security
+
+- Import rejects a `resourceFilePath` that escapes the export directory. A crafted Health export could
+  otherwise read arbitrary JSON off disk and serve it back as a clinical record.
+- Loopback matching is exact. The previous prefix test accepted any hostname beginning `127.`, which is the
+  DNS-rebinding vector the Host and Origin checks exist to stop.
+- Chunked request bodies are bounded before decoding, so an unauthenticated local socket cannot exhaust memory.
+- The backup manifest is decoded with secure coding on and a closed class list.
 
 ### Notes
 
