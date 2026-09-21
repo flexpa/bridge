@@ -26,9 +26,9 @@ jobs:
         env:
           RAW_TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
-          # Never interpolate ${{ }} into a shell body: a crafted workflow_dispatch input would
-          # run commands in the job that later unlocks the Developer ID key. Read it from the
-          # environment and allow only a semver tag.
+          # Never interpolate a GitHub expression into a shell body: a crafted workflow_dispatch
+          # input would run commands in the job that later unlocks the Developer ID key. Read it
+          # from the environment and allow only a semver tag.
           if [[ ! "$RAW_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error::Refusing tag '$RAW_TAG'. Expected vMAJOR.MINOR.PATCH."
             exit 1
