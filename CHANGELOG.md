@@ -5,6 +5,12 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.1.0] — 2026-09-21
+
+First public release.
+
 ### Added
 
 - **PHR export.** The panel's **Export PHR…** button and `HealthBridge --export-phr <file>` write the active data
@@ -22,20 +28,6 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Disconnect.** The data source menu (⋯) and `HealthBridge --disconnect` delete the imported Health store from
   the Mac, so agents lose access at once. The backup or export it came from is untouched; a backup password saved
   in the keychain for that device is forgotten.
-
-### Fixed
-
-- The import and export file panels no longer vanish on the first click: the popover stayed transient under a modal
-  panel, closed, and hid the app with the panel.
-- Samples and workouts now carry HealthKit's object UUID (`uuid`) when the data source has it, visible in
-  `get_samples` and `get_workouts` output.
-
-## [0.1.0] — 2026-09-19
-
-First public release.
-
-### Added
-
 - **Menu bar app** serving a read-only [Model Context Protocol](https://modelcontextprotocol.io) endpoint on
   `127.0.0.1`, with ten tools over Apple Health data: status, type catalog, samples, statistics, latest values,
   sleep, workouts, daily summaries, profile characteristics, and FHIR clinical records.
@@ -60,6 +52,13 @@ First public release.
   DNS-rebinding vector the Host and Origin checks exist to stop.
 - Chunked request bodies are bounded before decoding, so an unauthenticated local socket cannot exhaust memory.
 - The backup manifest is decoded with secure coding on and a closed class list.
+
+### Fixed
+
+- The import and export file panels no longer vanish on the first click: the popover stayed transient under a modal
+  panel, closed, and hid the app with the panel.
+- Samples and workouts now carry HealthKit's object UUID (`uuid`) when the data source has it, visible in
+  `get_samples` and `get_workouts` output.
 
 ### Notes
 
