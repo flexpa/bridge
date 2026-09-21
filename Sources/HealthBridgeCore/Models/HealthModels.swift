@@ -190,9 +190,11 @@ public struct HealthSample: Codable, Equatable, Sendable {
     public var source: String?
     public var device: String?
     public var metadata: [String: String]?
+    /// HealthKit's object UUID, when the data source keeps it (backup imports, live HealthKit).
+    public var uuid: String?
 
     public init(type: String, start: Date, end: Date, value: Double, unit: String, categoryValue: String? = nil,
-                source: String? = nil, device: String? = nil, metadata: [String: String]? = nil) {
+                source: String? = nil, device: String? = nil, metadata: [String: String]? = nil, uuid: String? = nil) {
         self.type = type
         self.start = start
         self.end = end
@@ -202,6 +204,7 @@ public struct HealthSample: Codable, Equatable, Sendable {
         self.source = source
         self.device = device
         self.metadata = metadata
+        self.uuid = uuid
     }
 
     public var duration: TimeInterval { end.timeIntervalSince(start) }
@@ -347,10 +350,12 @@ public struct Workout: Codable, Equatable, Sendable {
     public var maxHeartRate: Double?
     public var source: String?
     public var metadata: [String: String]?
+    /// HealthKit's object UUID, when the data source keeps it.
+    public var uuid: String?
 
     public init(activityType: String, start: Date, end: Date, durationMinutes: Double, totalEnergyKcal: Double? = nil,
                 totalDistanceKm: Double? = nil, averageHeartRate: Double? = nil, maxHeartRate: Double? = nil,
-                source: String? = nil, metadata: [String: String]? = nil) {
+                source: String? = nil, metadata: [String: String]? = nil, uuid: String? = nil) {
         self.activityType = activityType
         self.start = start
         self.end = end
@@ -361,6 +366,7 @@ public struct Workout: Codable, Equatable, Sendable {
         self.maxHeartRate = maxHeartRate
         self.source = source
         self.metadata = metadata
+        self.uuid = uuid
     }
 }
 

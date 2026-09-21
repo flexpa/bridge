@@ -104,6 +104,14 @@ HTTP on loopback plus port-to-pid lookup gets the same identity with no shim.
 * An agent that legitimately reads data can do anything with it. The audit log records what was asked, not what
   happened afterwards.
 
+## PHR export
+
+**Export PHR…** and `--export-phr` write the complete record to a file the user chooses, in plain text, with
+`0600` permissions. The export is not an MCP tool and cannot be triggered by an agent: a program holding a bearer
+token gets read access to the data it asks for, never a way to make the bridge write that data somewhere. Each
+export is recorded in the audit log. The file itself is unencrypted; the IG recommends passphrase or public-key
+encryption of `.sphr` archives before sharing, which is left to the user's tools.
+
 ## Reporting
 
 Security issues: security@flexpa.com.

@@ -27,6 +27,13 @@ enum CommandLineTool {
         case "--import-backup", "import-backup":
             guard let target = arguments.dropFirst().first else { fail("usage: HealthBridge --import-backup <udid|device name|folder> [--remember-password]") }
             importBackup(target, remember: arguments.contains("--remember-password"))
+        case "--disconnect", "disconnect":
+            disconnect()
+        case "--export-phr", "export-phr":
+            guard let path = arguments.dropFirst().first, !path.hasPrefix("--") else {
+                fail("usage: HealthBridge --export-phr <file.phr|file.sphr> [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--no-clinical] [--no-sleep-segments] [--patient-name <name>] [--demo]")
+            }
+            exportPHR(path, flags: Array(arguments.dropFirst(2)))
         case "--version", "-v":
             print("\(BridgeInfo.displayName) \(BridgeInfo.version)")
         case "--help", "-h", "help":
@@ -52,6 +59,11 @@ enum CommandLineTool {
                                Decrypt the Health store out of an encrypted iPhone backup and import it.
                                Password: HEALTHBRIDGE_BACKUP_PASSWORD, the login keychain, or an interactive prompt.
                                The terminal app needs Full Disk Access to see the backup folder.
+      --disconnect             Delete the imported Health data from this Mac (the backup or export file stays)
+      --export-phr <file.phr|file.sphr> [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--no-clinical]
+                   [--no-sleep-segments] [--patient-name <name>] [--demo]
+                               Write the active data source as an HL7 FHIR Personal Health Record.
+                               .phr is newline-delimited JSON (one resource per line); .sphr zips it.
       --version                Print the version
     """
 
@@ -192,6 +204,97 @@ enum CommandLineTool {
             print("Restart Flexpa Health Bridge (or switch data source) to serve the new data.")
         } catch {
             fail("import failed: \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)")
+        }
+    }
+
+    private static func disconnect() {
+        let provider = HealthExportProvider(databaseURL: AppPaths.exportDatabase)
+        guard FileManager.default.fileExists(atPath: AppPaths.exportDatabase.path) else {
+            print("No imported Health data on this Mac.")
+            return
+        }
+        let udid = provider.meta("deviceUDID")
+        do {
+            try provider.removeStore()
+            if let udid, !udid.isEmpty { BackupPasswordStore.forget(udid: udid) }
+            print("Removed the imported Health data from this Mac. The backup or export it came from is untouched.")
+            print("Restart Flexpa Health Bridge (or switch data source) so agents stop seeing it.")
+        } catch {
+            fail("disconnect failed: \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)")
+        }
+    }
+
+    private static func exportPHR(_ path: String, flags: [String]) {
+        var options = PHRExportOptions()
+        var useDemo = false
+        var start: Date? = nil, end: Date? = nil
+        var i = 0
+        func value(after flag: String) -> String {
+            i += 1
+            guard i < flags.count else { fail("\(flag) needs a value") }
+            return flags[i]
+        }
+        while i < flags.count {
+            switch flags[i] {
+            case "--start":
+                let raw = value(after: "--start")
+                guard let d = ISO8601.date(from: raw) else { fail("--start must be an ISO 8601 date, got '\(raw)'") }
+                start = d
+            case "--end":
+                let raw = value(after: "--end")
+                guard var d = ISO8601.date(from: raw) else { fail("--end must be an ISO 8601 date, got '\(raw)'") }
+                // A bare day means "through that day".
+                if raw.count == 10, let next = Calendar.current.date(byAdding: .day, value: 1, to: d) { d = next }
+                end = d
+            case "--no-clinical": options.includeClinicalRecords = false
+            case "--no-sleep-segments": options.includeSleepSegments = false
+            case "--patient-name": options.patientName = value(after: "--patient-name")
+            case "--demo": useDemo = true
+            default: fail("unknown option '\(flags[i])'")
+            }
+            i += 1
+        }
+
+        let settings = BridgeSettings.load(from: AppPaths.settings)
+        let provider: HealthDataProvider
+        if useDemo || settings.dataSource == .demo {
+            provider = DemoHealthProvider()
+        } else if HealthKitProvider.isAvailable, settings.dataSource == .healthKit || settings.dataSource == .automatic {
+            provider = HealthKitProvider()
+        } else {
+            provider = HealthExportProvider(databaseURL: AppPaths.exportDatabase)
+        }
+        if start != nil || end != nil {
+            let e = end ?? Date()
+            let s = start ?? Calendar.current.date(byAdding: .year, value: -100, to: e)!
+            guard s < e else { fail("--start must be before --end") }
+            options.range = DateInterval(start: s, end: e)
+        }
+
+        let destination = URL(fileURLWithPath: path)
+        let scratch = AppPaths.exportScratch.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let exporter = PHRExporter(provider: provider, scratch: scratch) { progress in
+            FileHandle.standardError.write(Data("\r\(progress.phase)… \(progress.resources.formatted()) resources      ".utf8))
+        }
+        final class Outcome: @unchecked Sendable { var result: Result<PHRExportReport, Error>? }
+        let outcome = Outcome()
+        let done = DispatchSemaphore(value: 0)
+        Task.detached {
+            defer { done.signal() }
+            do { outcome.result = .success(try await exporter.run(to: destination, options: options)) } catch { outcome.result = .failure(error) }
+        }
+        done.wait()
+        switch outcome.result {
+        case .success(let r):
+            FileHandle.standardError.write(Data("\r".utf8))
+            let size = ByteCountFormatter.string(fromByteCount: Int64(r.bytes), countStyle: .file)
+            print("Exported \(r.resources.formatted()) resources to \(destination.path) in \(Int(r.duration.rounded()))s.")
+            print("  \(r.observations.formatted()) observations, \(r.sleepEpisodes) sleep episodes, \(r.workouts) workouts, \(r.clinicalRecords) clinical records, \(r.devices) data sources.")
+            print("  Covers \(ISO8601.dayString(r.range.start)) to \(ISO8601.dayString(r.range.end)). \(size) of NDJSON\(r.format == .sphr ? ", zipped" : "").")
+        case .failure(let error):
+            fail("\nexport failed: \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)")
+        case .none:
+            fail("\nexport did not finish")
         }
     }
 

@@ -94,8 +94,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     func popoverDidClose(_ notification: Notification) {
-        // Hand focus back to whatever the user was doing.
-        NSApp.hide(nil)
+        // Hand focus back to whatever the user was doing, unless one of our panels is still up:
+        // hiding the app would take a modal save or open panel down with the popover.
+        if NSApp.modalWindow == nil { NSApp.hide(nil) }
+    }
+
+    /// Runs a modal open or save panel with the popover pinned open. The popover is transient, so
+    /// without this the first click inside the panel closes the popover behind it, and the panel
+    /// disappears with the rest of the app.
+    func runModalPanel<T>(_ body: () -> T) -> T {
+        let previous = popover.behavior
+        popover.behavior = .applicationDefined
+        defer { popover.behavior = previous }
+        return body()
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

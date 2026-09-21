@@ -5,6 +5,31 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **PHR export.** The panel's **Export PHR…** button and `HealthBridge --export-phr <file>` write the active data
+  source as an HL7 FHIR Personal Health Record following the
+  [Personal Health Records IG](https://build.fhir.org/ig/HL7/personal-health-record-format-ig/en/) (1.0.0-ballot2):
+  a `.phr` file (newline-delimited JSON, one resource per line) or a `.sphr` zip around it. Every HealthKit type in
+  the catalog maps to the IG's Patient Generated Health Data profile, code and unit; blood pressure halves are paired
+  into panels, each night becomes a sleep episode with stage components, workouts group their energy and distance
+  totals, and provider clinical records pass through with `meta.source`. A Patient, a Composition cover page,
+  a Provenance record and one Device per data source lead the file. Ids are HealthKit UUIDs where the store keeps
+  them and stable hashes otherwise, so repeated exports merge. Options: date range, clinical records on or off,
+  sleep segments on or off, patient name (CLI). Streams, so a multi-million-sample store never sits in memory.
+  See [docs/PHR-EXPORT.md](docs/PHR-EXPORT.md).
+- `.phr` and `.sphr` are declared to macOS as `org.hl7.fhir.phr` and `org.hl7.fhir.sphr`.
+- **Disconnect.** The data source menu (⋯) and `HealthBridge --disconnect` delete the imported Health store from
+  the Mac, so agents lose access at once. The backup or export it came from is untouched; a backup password saved
+  in the keychain for that device is forgotten.
+
+### Fixed
+
+- The import and export file panels no longer vanish on the first click: the popover stayed transient under a modal
+  panel, closed, and hid the app with the panel.
+- Samples and workouts now carry HealthKit's object UUID (`uuid`) when the data source has it, visible in
+  `get_samples` and `get_workouts` output.
+
 ## [0.1.0] — 2026-09-19
 
 First public release.

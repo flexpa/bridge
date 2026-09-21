@@ -1,6 +1,7 @@
 import AppKit
 import HealthBridgeCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct MenuPanel: View {
     @EnvironmentObject var bridge: BridgeService
@@ -89,6 +90,7 @@ private struct HeaderView: View {
 private struct DataSourceSection: View {
     @EnvironmentObject var bridge: BridgeService
     @State private var importError: String?
+    @State private var confirmDisconnect = false
     // `--expand` (preview mode) also opens the backup picker for design review.
     @State private var showBackupPicker = CommandLine.arguments.contains("--expand")
     @EnvironmentObject private var coach: FullDiskAccessCoach
@@ -107,24 +109,45 @@ private struct DataSourceSection: View {
                     }
                 }
             } else if let status = bridge.providerStatus {
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: icon(for: status))
-                        .font(.system(size: 16))
-                        .foregroundStyle(status.available ? Color.accentColor : Color.secondary)
-                        .frame(width: 20)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(status.description).font(.system(size: 12, weight: .medium))
-                        if let range = status.dataRange, let count = status.sampleCount, status.available {
-                            Text("\(count.formatted()) samples · \(dayString(range.start)) → \(dayString(range.end))")
-                                .font(.system(size: 11)).foregroundStyle(.secondary)
-                        }
-                        if let detail = status.detail {
-                            Text(detail).font(.system(size: 11)).foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
+                if status.available {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: icon(for: status))
+                            .font(.system(size: 16))
+                            .foregroundStyle(Color.accentColor)
+                            .frame(width: 20)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(status.description).font(.system(size: 12, weight: .medium))
+                            if let range = status.dataRange, let count = status.sampleCount {
+                                Text("\(count.formatted()) samples · \(dayString(range.start)) → \(dayString(range.end))")
+                                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                            }
+                            if let detail = status.detail {
+                                Text(detail).font(.system(size: 11)).foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
                     }
+                    actionRow(for: status)
+                } else {
+                    EmptyDataSourceView(
+                        grantAccess: status.kind == "healthkit" && status.authorization != .unavailable
+                            ? { Task { await bridge.requestHealthAccess() } } : nil,
+                        importBackup: openBackupPicker,
+                        importExport: chooseExport,
+                        tryDemo: { bridge.update { $0.dataSource = .demo } }
+                    )
                 }
-                actionRow(for: status)
+                if let progress = bridge.exportProgress {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("\(progress.phase)…").font(.system(size: 12, weight: .medium))
+                            Text("\(progress.resources.formatted()) resources written").font(.system(size: 11)).foregroundStyle(.secondary)
+                        }
+                    }
+                } else if let report = bridge.lastExport {
+                    ExportResultRow(report: report)
+                }
                 if showBackupPicker || bridge.settings.resumeBackupPicker, bridge.importProgress == nil {
                     BackupPickerView(onDone: {
                         showBackupPicker = false
@@ -142,6 +165,11 @@ private struct DataSourceSection: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+        .confirmationDialog("Disconnect the imported Health data?", isPresented: $confirmDisconnect) {
+            Button("Remove Data", role: .destructive) { Task { await bridge.disconnectImportedData() } }
+        } message: {
+            Text("Deletes the imported store from this Mac. Agents lose access immediately. Your iPhone backup and any export file are not touched. A backup password saved in the keychain is forgotten.")
+        }
     }
 
     private func icon(for status: ProviderStatus) -> String {
@@ -152,32 +180,53 @@ private struct DataSourceSection: View {
         }
     }
 
+    /// One pull-down for the two import paths, the export beside it, and a menu for the store itself.
     @ViewBuilder
     private func actionRow(for status: ProviderStatus) -> some View {
+        let busy = bridge.importProgress != nil || bridge.isExporting
         HStack(spacing: 8) {
-            if status.kind == "healthkit", status.available {
-                Button(status.authorization == .requested ? "Review Health Access…" : "Grant Health Access…") {
-                    Task { await bridge.requestHealthAccess() }
+                if status.kind == "healthkit" {
+                    Button(status.authorization == .requested ? "Review Health Access…" : "Grant Health Access…") {
+                        Task { await bridge.requestHealthAccess() }
+                    }
                 }
-            }
-            Button(showBackupPicker || bridge.settings.resumeBackupPicker ? "Hide Backups" : "Import from iPhone Backup…") {
-                if showBackupPicker || bridge.settings.resumeBackupPicker {
-                    showBackupPicker = false
-                    bridge.update { $0.resumeBackupPicker = false }
-                } else {
-                    showBackupPicker = true
-                    bridge.refreshBackups()
+                Menu {
+                    Button("From iPhone Backup…", action: openBackupPicker)
+                    Button("From Health Export File…", action: chooseExport)
+                } label: {
+                    Text("Import…")
                 }
-            }
-            Button(bridge.hasImportedExport ? "Import Export…" : "Import Health Export…") { chooseExport() }
-            if status.kind != "demo", !status.available {
-                Button("Try Demo Data") { bridge.update { $0.dataSource = .demo } }
-            }
-            if status.kind == "demo" {
-                Button("Stop Demo") { bridge.update { $0.dataSource = .automatic } }
+                .fixedSize()
+                .disabled(busy)
+                .help("Replace the imported data with a fresh backup or export")
+                Button("Export PHR…", action: chooseExportDestination)
+                    .disabled(busy)
+                    .help("Write your health data as an HL7 FHIR Personal Health Record (.phr or .sphr)")
+                if status.kind == "demo" {
+                    Button("Stop Demo") { bridge.update { $0.dataSource = .automatic } }
+                }
+                Spacer(minLength: 0)
+                if bridge.hasImportedExport {
+                    Menu {
+                        Button("Show Store in Finder") { NSWorkspace.shared.activateFileViewerSelecting([AppPaths.exportDatabase]) }
+                        Divider()
+                        Button("Disconnect…", role: .destructive) { confirmDisconnect = true }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .frame(width: 22)
+                    .disabled(busy)
+                    .help("Show or remove the imported Health data")
             }
         }
         .controlSize(.small)
+    }
+
+    private func openBackupPicker() {
+        showBackupPicker = true
+        bridge.refreshBackups()
     }
 
     private func chooseExport() {
@@ -188,14 +237,196 @@ private struct DataSourceSection: View {
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         panel.allowedContentTypes = [.zip, .xml, .folder]
-        NSApp.activate(ignoringOtherApps: true)
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard runModal(panel) == .OK, let url = panel.url else { return }
         importError = nil
         Task { await bridge.importHealthExport(from: url) }
     }
 
+    /// Presents a panel without letting the popover close underneath it.
+    private func runModal(_ panel: NSSavePanel) -> NSApplication.ModalResponse {
+        NSApp.activate(ignoringOtherApps: true)
+        if let delegate = NSApp.delegate as? AppDelegate {
+            return delegate.runModalPanel { panel.runModal() }
+        }
+        return panel.runModal()
+    }
+
+    private func chooseExportDestination() {
+        let panel = NSSavePanel()
+        panel.title = "Export Personal Health Record"
+        panel.message = "Writes your health data as an HL7 FHIR Personal Health Record. Treat the file as sensitive: it is your complete record."
+        panel.nameFieldStringValue = "Health Record \(ISO8601.dayString(Date())).phr"
+        panel.allowedContentTypes = [PHRFileTypes.phr]
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+        let model = ExportOptionsModel()
+        let accessory = NSHostingView(rootView: ExportOptionsView(model: model, panel: panel))
+        accessory.frame = NSRect(x: 0, y: 0, width: 420, height: 96)
+        panel.accessoryView = accessory
+        guard runModal(panel) == .OK, let url = panel.url else { return }
+        importError = nil
+        let options = model.exportOptions
+        Task { await bridge.exportPHR(to: url, options: options) }
+    }
+
     private func dayString(_ d: Date) -> String {
         d.formatted(.dateTime.year().month(.abbreviated).day())
+    }
+}
+
+// MARK: - PHR export
+
+/// Uniform type identifiers from the PHR IG's operating-systems page, also declared in Info.plist.
+enum PHRFileTypes {
+    static let phr = UTType(exportedAs: "org.hl7.fhir.phr", conformingTo: .plainText)
+    static let sphr = UTType(exportedAs: "org.hl7.fhir.sphr", conformingTo: .zip)
+}
+
+@MainActor
+final class ExportOptionsModel: ObservableObject {
+    enum Range: String, CaseIterable, Identifiable {
+        case everything, year, quarter
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .everything: return "Everything"
+            case .year: return "Last 12 months"
+            case .quarter: return "Last 90 days"
+            }
+        }
+    }
+
+    @Published var format: PHRExportFormat = .phr
+    @Published var range: Range = .everything
+    @Published var includeClinical = true
+
+    var exportOptions: PHRExportOptions {
+        var options = PHRExportOptions(includeClinicalRecords: includeClinical)
+        let now = Date()
+        switch range {
+        case .everything: break
+        case .year: options.range = DateInterval(start: Calendar.current.date(byAdding: .year, value: -1, to: now)!, end: now)
+        case .quarter: options.range = DateInterval(start: Calendar.current.date(byAdding: .day, value: -90, to: now)!, end: now)
+        }
+        return options
+    }
+}
+
+private struct ExportOptionsView: View {
+    @ObservedObject var model: ExportOptionsModel
+    let panel: NSSavePanel
+
+    var body: some View {
+        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 6) {
+            GridRow {
+                Text("Format")
+                Picker("", selection: $model.format) {
+                    Text(".phr — newline-delimited FHIR JSON").tag(PHRExportFormat.phr)
+                    Text(".sphr — zip archive around the .phr").tag(PHRExportFormat.sphr)
+                }
+                .labelsHidden()
+            }
+            GridRow {
+                Text("Range")
+                Picker("", selection: $model.range) {
+                    ForEach(ExportOptionsModel.Range.allCases) { Text($0.label).tag($0) }
+                }
+                .labelsHidden()
+            }
+            GridRow {
+                Text("")
+                Toggle("Include clinical records from connected providers", isOn: $model.includeClinical)
+            }
+        }
+        .controlSize(.small)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .onChange(of: model.format) { _, format in
+            let base = (panel.nameFieldStringValue as NSString).deletingPathExtension
+            panel.allowedContentTypes = [format == .phr ? PHRFileTypes.phr : PHRFileTypes.sphr]
+            panel.nameFieldStringValue = base + "." + format.rawValue
+        }
+    }
+}
+
+private struct ExportResultRow: View {
+    @EnvironmentObject var bridge: BridgeService
+    let report: PHRExportReport
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(summary, systemImage: "checkmark.circle.fill")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([report.url]) }
+                Button("Dismiss") { bridge.clearLastExport() }
+            }
+            .controlSize(.small)
+        }
+    }
+
+    private var summary: String {
+        let size = ByteCountFormatter.string(fromByteCount: Int64(report.bytes), countStyle: .file)
+        var s = "Exported \(report.resources.formatted()) resources (\(size)) to \(report.url.lastPathComponent)."
+        if report.clinicalRecords > 0 { s += " Includes \(report.clinicalRecords) clinical records." }
+        return s
+    }
+}
+
+// MARK: - Empty state
+
+/// Shown when nothing is connected: what the bridge needs and the two ways to provide it.
+private struct EmptyDataSourceView: View {
+    let grantAccess: (() -> Void)?
+    let importBackup: () -> Void
+    let importExport: () -> Void
+    let tryDemo: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "iphone.and.arrow.forward")
+                    .font(.system(size: 16))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 20)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("No health data on this Mac yet").font(.system(size: 12, weight: .medium))
+                    Text("Macs have no Health app store, so the bridge serves a copy of your iPhone's data. Bring it over in one of two ways.")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            if let grantAccess {
+                option(icon: "heart.circle", title: "Health on this Mac",
+                       detail: "This Mac has a Health store. Allow the bridge to read it.", button: "Grant Access…", action: grantAccess)
+            }
+            option(icon: "lock.iphone", title: "Encrypted iPhone backup",
+                   detail: "The complete Health store, refreshed every time the phone backs up to this Mac. Needs Full Disk Access and the backup password.",
+                   button: "Import…", action: importBackup)
+            option(icon: "doc.zipper", title: "Health app export",
+                   detail: "On the iPhone: Health → profile picture → Export All Health Data, then AirDrop export.zip here.",
+                   button: "Choose File…", action: importExport)
+            Button("Try demo data instead", action: tryDemo)
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.accentColor)
+                .font(.system(size: 11))
+                .padding(.leading, 2)
+        }
+    }
+
+    private func option(icon: String, title: String, detail: String, button: String, action: @escaping () -> Void) -> some View {
+        HStack(alignment: .center, spacing: 8) {
+            Image(systemName: icon).font(.system(size: 14)).foregroundStyle(.secondary).frame(width: 20)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.system(size: 12, weight: .medium))
+                Text(detail).font(.system(size: 10.5)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            Button(button, action: action).controlSize(.small).fixedSize()
+        }
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.05)))
     }
 }
 
@@ -210,6 +441,15 @@ private struct BackupPickerView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("iPhone backups on this Mac").font(.system(size: 11, weight: .semibold))
+                Spacer()
+                Button(action: onDone) {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Close")
+            }
             content
             if let report = bridge.lastBackupImport {
                 Text(summary(report)).font(.system(size: 10.5)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)

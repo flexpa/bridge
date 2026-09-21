@@ -28,6 +28,8 @@ public final class BridgeService: ObservableObject {
     @Published public private(set) var backupsError: String?
     @Published public private(set) var backupsNeedFullDiskAccess = false
     @Published public private(set) var lastError: String?
+    @Published public private(set) var exportProgress: PHRExportProgress?
+    @Published public private(set) var lastExport: PHRExportReport?
 
     public let pairingStore: PairingStore
     public let audit: AuditLog
@@ -233,6 +235,60 @@ public final class BridgeService: ObservableObject {
         }
         await refreshProviderStatus()
     }
+
+    // MARK: Disconnect
+
+    /// Deletes the imported Health store from this Mac. Agents lose access at once. The iPhone
+    /// backup or export file it came from stays where it is; a backup password saved in the
+    /// keychain for that device is forgotten.
+    public func disconnectImportedData() async {
+        guard !isImporting, !isExporting else { return }
+        let udid = export.meta("deviceUDID")
+        do {
+            try export.removeStore()
+            if let udid, !udid.isEmpty { BackupPasswordStore.forget(udid: udid) }
+            lastImport = nil
+            lastBackupImport = nil
+            lastError = nil
+            providerBox.value = selectProvider()
+            audit.append(AuditEvent(outcome: .ok, method: "disconnect", summary: "imported Health data removed from this Mac"))
+        } catch {
+            lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            audit.append(AuditEvent(outcome: .error, method: "disconnect", summary: lastError ?? "failed"))
+        }
+        await refreshProviderStatus()
+    }
+
+    // MARK: PHR export
+
+    public var isExporting: Bool { exportProgress != nil }
+
+    /// Writes the active data source as an HL7 Personal Health Record (`.phr` NDJSON or `.sphr` zip).
+    public func exportPHR(to destination: URL, options: PHRExportOptions) async {
+        guard !isExporting, !isImporting else { return }
+        exportProgress = PHRExportProgress(phase: "Starting", resources: 0)
+        lastError = nil
+        let provider = activeProvider
+        let scratch = AppPaths.exportScratch.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let result: Result<PHRExportReport, Error> = await Task.detached(priority: .userInitiated) { [provider, scratch] in
+            let exporter = PHRExporter(provider: provider, scratch: scratch) { progress in
+                Task { @MainActor [weak self] in self?.exportProgress = progress }
+            }
+            do { return .success(try await exporter.run(to: destination, options: options)) } catch { return .failure(error) }
+        }.value
+        exportProgress = nil
+        switch result {
+        case .success(let report):
+            lastExport = report
+            audit.append(AuditEvent(outcome: .ok, method: "export-phr",
+                                    summary: "\(report.resources) resources to \(destination.lastPathComponent)"))
+        case .failure(let error):
+            lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            audit.append(AuditEvent(outcome: .error, method: "export-phr", summary: lastError ?? "failed"))
+        }
+    }
+
+    public func clearLastExport() { lastExport = nil }
 
     // MARK: iPhone backups
 

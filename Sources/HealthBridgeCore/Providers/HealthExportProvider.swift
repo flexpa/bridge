@@ -29,6 +29,19 @@ public final class HealthExportProvider: HealthDataProvider, @unchecked Sendable
         db = FileManager.default.fileExists(atPath: databaseURL.path) ? try? SQLiteDatabase(path: databaseURL.path) : nil
     }
 
+    /// Closes the store and deletes it from disk. The source it was imported from (a backup or an
+    /// export file) is not touched. Queries already running finish on the closed handle.
+    public func removeStore() throws {
+        lock.lock()
+        db = nil
+        lock.unlock()
+        let fm = FileManager.default
+        for suffix in ["", "-wal", "-shm", ".importing"] {
+            let path = databaseURL.path + suffix
+            if fm.fileExists(atPath: path) { try fm.removeItem(atPath: path) }
+        }
+    }
+
     private func requireDB() throws -> SQLiteDatabase {
         lock.lock(); defer { lock.unlock() }
         guard let db else { throw HealthDataError.unavailable("No Health export has been imported. Import one from the Flexpa Health Bridge menu.") }
@@ -60,7 +73,7 @@ public final class HealthExportProvider: HealthDataProvider, @unchecked Sendable
             let backupDate = meta("backupDate").flatMap { ISO8601.date(from: $0) }
             let day = backupDate.map { $0.formatted(.dateTime.year().month(.abbreviated).day()) }
             let ios = meta("iosVersion").map { " (iOS \($0))" } ?? ""
-            var detail = backupDate.map { "Full Health store from the encrypted iPhone backup made \($0.formatted(.relative(presentation: .named)))\(ios). Back up again and re-import to refresh." }
+            var detail = backupDate.map { "Complete Health store from the encrypted backup made \($0.formatted(.relative(presentation: .named)))\(ios). Back up and import again to refresh." }
             if let names = meta("uncataloguedNames").flatMap({ try? JSON.parse($0) })?.objectValue, !names.isEmpty {
                 let list = names.values.compactMap(\.stringValue).map { $0.replacingOccurrences(of: "HKQuantityTypeIdentifier", with: "").replacingOccurrences(of: "HKCategoryTypeIdentifier", with: "").replacingOccurrences(of: "HKDataTypeIdentifier", with: "") }.sorted()
                 detail = (detail ?? "") + " Present but not served yet: \(list.prefix(8).joined(separator: ", "))\(list.count > 8 ? ", and \(list.count - 8) more" : "")."
@@ -76,7 +89,7 @@ public final class HealthExportProvider: HealthDataProvider, @unchecked Sendable
         let exportDay = exportDate.map { $0.formatted(.dateTime.year().month(.abbreviated).day()) }
         return ProviderStatus(kind: kind, description: "Health export" + (exportDay.map { " from \($0)" } ?? ""), available: count > 0,
                               authorization: .notApplicable,
-                              detail: exportDate.map { "Snapshot from the Health app, exported \($0.formatted(.relative(presentation: .named))). Re-import to refresh." },
+                              detail: exportDate.map { "Snapshot from the Health app, exported \($0.formatted(.relative(presentation: .named))). Export and import again to refresh." },
                               supportsClinicalRecords: clinical > 0, dataRange: range, sampleCount: count)
     }
 
@@ -92,7 +105,7 @@ public final class HealthExportProvider: HealthDataProvider, @unchecked Sendable
         let db = try requireDB()
         let order = ascending ? "ASC" : "DESC"
         let sql = """
-        SELECT start, end, value, unit, category, source, device FROM samples
+        SELECT start, end, value, unit, category, source, device, uuid FROM samples
         WHERE type = ? AND end >= ? AND start < ?
         ORDER BY start \(order) LIMIT ?
         """
@@ -104,7 +117,7 @@ public final class HealthExportProvider: HealthDataProvider, @unchecked Sendable
         }, row: { s in
             HealthSample(type: type.identifier, start: Date(timeIntervalSince1970: s.double(0) ?? 0),
                          end: Date(timeIntervalSince1970: s.double(1) ?? 0), value: s.double(2) ?? 0, unit: s.string(3) ?? type.unit,
-                         categoryValue: s.string(4), source: s.string(5), device: s.string(6))
+                         categoryValue: s.string(4), source: s.string(5), device: s.string(6), uuid: s.string(7))
         })
     }
 
@@ -127,7 +140,7 @@ public final class HealthExportProvider: HealthDataProvider, @unchecked Sendable
 
     public func workouts(in range: DateInterval?, activityType: String?, limit: Int) async throws -> [Workout] {
         let db = try requireDB()
-        var sql = "SELECT activity, start, end, duration_min, energy_kcal, distance_km, avg_hr, max_hr, source FROM workouts WHERE start >= ? AND start < ?"
+        var sql = "SELECT activity, start, end, duration_min, energy_kcal, distance_km, avg_hr, max_hr, source, uuid FROM workouts WHERE start >= ? AND start < ?"
         if activityType != nil { sql += " AND LOWER(activity) = LOWER(?)" }
         sql += " ORDER BY start DESC LIMIT ?"
         var list: [Workout] = try db.query(sql, bind: { s in
@@ -139,7 +152,8 @@ public final class HealthExportProvider: HealthDataProvider, @unchecked Sendable
         }, row: { s in
             Workout(activityType: s.string(0) ?? "other", start: Date(timeIntervalSince1970: s.double(1) ?? 0),
                     end: Date(timeIntervalSince1970: s.double(2) ?? 0), durationMinutes: s.double(3) ?? 0, totalEnergyKcal: s.double(4),
-                    totalDistanceKm: s.double(5), averageHeartRate: s.double(6), maxHeartRate: s.double(7), source: s.string(8))
+                    totalDistanceKm: s.double(5), averageHeartRate: s.double(6), maxHeartRate: s.double(7), source: s.string(8),
+                    uuid: s.string(9))
         })
         // On-device workouts rarely carry heart-rate statistics in the store; derive them from the samples in the window.
         let hrSQL = "SELECT AVG(value), MAX(value) FROM samples WHERE type = 'HKQuantityTypeIdentifierHeartRate' AND start >= ? AND start < ?"

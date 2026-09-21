@@ -136,7 +136,7 @@ public final class HealthKitProvider: HealthDataProvider, @unchecked Sendable {
             let hkUnit = unit(for: type)
             guard q.quantity.is(compatibleWith: hkUnit) else { return nil }
             return HealthSample(type: type.identifier, start: q.startDate, end: q.endDate, value: q.quantity.doubleValue(for: hkUnit),
-                                unit: type.unit, source: source, device: device, metadata: metadata)
+                                unit: type.unit, source: source, device: device, metadata: metadata, uuid: q.uuid.uuidString)
         }
         if let c = sample as? HKCategorySample {
             var label: String? = nil
@@ -146,7 +146,7 @@ public final class HealthKitProvider: HealthDataProvider, @unchecked Sendable {
                 label = c.value == 0 ? "stood" : "idle"
             }
             return HealthSample(type: type.identifier, start: c.startDate, end: c.endDate, value: Double(c.value), unit: "",
-                                categoryValue: label, source: source, device: device, metadata: metadata)
+                                categoryValue: label, source: source, device: device, metadata: metadata, uuid: c.uuid.uuidString)
         }
         return nil
     }
@@ -222,7 +222,7 @@ public final class HealthKitProvider: HealthDataProvider, @unchecked Sendable {
             if let md = w.metadata, !md.isEmpty { metadata = md.reduce(into: [:]) { $0[$1.key] = String(describing: $1.value) } }
             return Workout(activityType: name, start: w.startDate, end: w.endDate, durationMinutes: w.duration / 60,
                            totalEnergyKcal: energy, totalDistanceKm: distance, averageHeartRate: hr.0, maxHeartRate: hr.1,
-                           source: w.sourceRevision.source.name, metadata: metadata)
+                           source: w.sourceRevision.source.name, metadata: metadata, uuid: w.uuid.uuidString)
         }
         if let activityType {
             list = list.filter { $0.activityType.lowercased() == activityType.lowercased() }

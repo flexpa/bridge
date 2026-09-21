@@ -38,5 +38,54 @@
 	<false/>
 	<key>NSSupportsSuddenTermination</key>
 	<false/>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>org.hl7.fhir.phr</string>
+			<key>UTTypeDescription</key>
+			<string>Personal Health Record (FHIR NDJSON)</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.plain-text</string>
+			</array>
+			<key>UTTypeReferenceURL</key>
+			<string>https://build.fhir.org/ig/HL7/personal-health-record-format-ig/</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>phr</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>application/x-ndjson</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>org.hl7.fhir.sphr</string>
+			<key>UTTypeDescription</key>
+			<string>Personal Health Record archive</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.zip-archive</string>
+			</array>
+			<key>UTTypeReferenceURL</key>
+			<string>https://build.fhir.org/ig/HL7/personal-health-record-format-ig/</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>sphr</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>application/zip</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
 </dict>
 </plist>

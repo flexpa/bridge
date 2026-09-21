@@ -63,4 +63,5 @@ public enum AppPaths {
     public static var auditLog: URL { supportDirectory.appendingPathComponent("audit.jsonl") }
     public static var exportDatabase: URL { supportDirectory.appendingPathComponent("health-export.sqlite") }
     public static var importScratch: URL { supportDirectory.appendingPathComponent("import", isDirectory: true) }
+    public static var exportScratch: URL { supportDirectory.appendingPathComponent("export", isDirectory: true) }
 }

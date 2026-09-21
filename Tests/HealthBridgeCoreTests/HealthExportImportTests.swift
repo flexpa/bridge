@@ -137,3 +137,28 @@ final class HealthExportImportTests: XCTestCase {
         XCTAssertEqual(attrs[.posixPermissions] as? Int, 0o600)
     }
 }
+
+final class DisconnectTests: XCTestCase {
+    func testRemoveStoreDeletesTheDatabaseAndReportsNoData() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("hb-disconnect-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let dbURL = dir.appendingPathComponent("export.sqlite")
+        let fixture = Bundle.module.url(forResource: "export", withExtension: nil, subdirectory: "Fixtures")!
+        _ = try HealthExportImporter(destination: dbURL, scratch: dir.appendingPathComponent("scratch")).run(source: fixture)
+        let provider = HealthExportProvider(databaseURL: dbURL)
+        XCTAssertTrue(provider.hasData)
+
+        try provider.removeStore()
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dbURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dbURL.path + "-wal"))
+        XCTAssertFalse(provider.hasData)
+        let status = await provider.status()
+        XCTAssertFalse(status.available)
+        let types = await provider.availableTypes()
+        XCTAssertEqual(types.count, 0)
+        // Removing twice is harmless.
+        try provider.removeStore()
+    }
+}
