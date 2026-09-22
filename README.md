@@ -8,10 +8,20 @@ A small macOS menu bar app that exposes your Apple Health data to AI agents on t
 [Model Context Protocol](https://modelcontextprotocol.io) server. Read-only. Loopback only. Every agent is paired
 explicitly, and every request is logged.
 
-```
- iPhone / Watch ──iCloud──▶ Health ──▶ HealthKit ──┐
-                                                    ├──▶ Health Bridge (menu bar) ──127.0.0.1──▶ Claude Code, Claude Desktop, Cursor …
- Health app export.zip ──▶ import ──▶ SQLite ───────┘        bearer token + code-signature binding
+<p align="center">
+  <img src="docs/images/panel.png" alt="The Flexpa Health Bridge menu bar panel: data source, paired agents, recent activity and settings" width="360">
+  <br>
+  <em>The menu bar panel, shown with the built-in demo data source.</em>
+</p>
+
+```mermaid
+flowchart LR
+  W["iPhone / Apple Watch"] --> H["Health app<br/>HealthKit store"]
+  H -->|"encrypted Finder backup"| S[("Local SQLite store<br/>on your Mac")]
+  H -->|"export.zip"| S
+  S --> B["Flexpa Health Bridge<br/>menu bar app"]
+  K["Live HealthKit<br/>dormant: macOS ships no Health store"] -.->|"when Apple ships one"| B
+  B -->|"127.0.0.1 only<br/>bearer token bound to the caller's code signature"| A["Claude Code · Claude Desktop<br/>Cursor · any MCP client"]
 ```
 
 > ### This is a research project
@@ -56,6 +66,22 @@ Until Apple turns HealthKit on for the Mac, real data comes from the iPhone in o
   **Import Health Export…**. Brings clinical records (FHIR) too.
 
 Both stream into the same SQLite store and serve the same MCP tools.
+
+## When Apple ships Health for the Mac
+
+The bridge is built so that day costs you nothing. Every data source sits behind one provider interface, and
+`HealthKitProvider` is already written against the real framework — authorization, sample queries, statistics
+collections, sleep, workouts, characteristics and clinical records. It is dormant only because
+`HKHealthStore.isHealthDataAvailable()` returns `false`. When Apple flips that, the bridge prefers live HealthKit,
+and nothing an agent sees changes: same tools, same arguments, same token, same port. No re-pairing, no re-import.
+
+A deeper version of that handover is designed but **not built**: implementing the daemon side of Apple's own XPC
+interface, so HealthKit-calling code on the Mac talks to the bridge's store as though `healthd` were present.
+[docs/HEALTHD-SHIM.md](docs/HEALTHD-SHIM.md) records the measurements behind it — HealthKit connects to a
+stand-in at `com.apple.healthd.server` 5,231 times in two seconds, and the surface to implement is 158 `HK*`
+protocols, with 53 methods in the front door alone. It also records why we did not schedule it, and the rule it
+would have to follow: register under our own name, never Apple's, and step aside the moment Apple's flag turns on.
+
 
 ## Install
 
