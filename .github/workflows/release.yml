@@ -95,8 +95,15 @@ jobs:
             -T /usr/bin/codesign -T /usr/bin/security
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
           rm -f "$RUNNER_TEMP/cert.p12"
-          # Deliberately NOT added to the default search list. Every step that signs passes
-          # --keychain explicitly, so no other step (or third-party action) can reach the key.
+
+          # codesign --keychain restricts which keychain is searched, but the identity lookup
+          # still goes through the user's search domain, so a keychain outside it is invisible
+          # and codesign fails with "The specified item could not be found in the keychain."
+          # Add it, remember what was there, and drop it again after the last signing step so
+          # the third-party release action never runs with the key in reach.
+          ORIGINAL_KEYCHAINS="$(security list-keychains -d user | sed -e 's/^[[:space:]]*"//' -e 's/"$//' | tr '\n' ' ')"
+          printf 'ORIGINAL_KEYCHAINS=%s\n' "$ORIGINAL_KEYCHAINS" >> "$GITHUB_ENV"
+          security list-keychains -d user -s "$KEYCHAIN" $ORIGINAL_KEYCHAINS
           printf 'SIGNING_KEYCHAIN=%s\n' "$KEYCHAIN" >> "$GITHUB_ENV"
 
           # `security import` reports success even when the identity ends up unusable
@@ -148,6 +155,14 @@ jobs:
           xcrun stapler staple "dist/FlexpaHealthBridge-${VERSION}.dmg"
 
           rm -f "$RUNNER_TEMP/notary.p8"
+
+      - name: Narrow the keychain search list again
+        run: |
+          # Everything that signs has run. The key stays in the keychain for stapler and
+          # spctl to verify against, but is no longer reachable by an identity lookup.
+          security list-keychains -d user -s $ORIGINAL_KEYCHAINS
+          security find-identity -v -p codesigning | grep -q "Developer ID" \
+            && { echo "::error::The signing key is still reachable after the signing steps."; exit 1; } || true
 
       - name: Verify Gatekeeper accepts it
         run: |
