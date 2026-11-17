@@ -65,6 +65,24 @@ public enum PGHDProfile: String, Sendable, CaseIterable {
             return ("", "")
         }
     }
+
+    /// `Quantity.unit` text the profile fixes, or nil where the profile leaves it free. Transcribed from the
+    /// IG's StructureDefinitions (`valueQuantity.unit` fixed or pattern strings). A validator rejects any other
+    /// text here, so the exporter writes exactly this instead of a friendlier label.
+    public var fixedUnitDisplay: String? {
+        switch self {
+        case .heartRate, .respiratoryRate: return "/min"
+        case .bodyTemperature: return "Cel"
+        case .bodyWeight: return "kg"
+        case .bodyHeight: return "cm"
+        case .bmi: return "kg/m2"
+        case .oxygenSaturation: return "%"
+        case .bloodGlucose: return "mmol/L"
+        case .activity, .vitalSigns, .cardiacFunction, .bodyMeasurement, .mobility, .hearing, .nutrition, .mindfulness,
+             .reproductiveHealth, .sleep, .sleepEpisode, .workout, .testResult, .bloodPressure, .device:
+            return nil
+        }
+    }
 }
 
 public struct FHIRCoding: Sendable, Equatable {
@@ -95,7 +113,7 @@ public struct PGHDMapping: Sendable {
     public var loinc: [FHIRCoding]
     /// UCUM code the IG assigns to the PGHD code, or nil for observations that carry no value.
     public var unitCode: String?
-    /// Human unit label for `Quantity.unit`.
+    /// Text for `Quantity.unit`: the profile's fixed unit where it has one, otherwise a human label.
     public var unitDisplay: String?
     /// Multiplier from the bridge's canonical unit to the IG's unit.
     public var factor: Double
@@ -112,14 +130,22 @@ public enum PGHDCodeMap {
 
     public static let table: [String: PGHDMapping] = {
         var t: [String: PGHDMapping] = [:]
+        // A profile that fixes Quantity.unit decides the text; a label is only for profiles that leave it free.
+        func unitDisplay(_ profile: PGHDProfile, unit: String?, label: String?, id: String) -> String? {
+            precondition(label == nil || profile.fixedUnitDisplay == nil,
+                         "\(id): \(profile.rawValue) fixes Quantity.unit to \(profile.fixedUnitDisplay!); drop the label")
+            return profile.fixedUnitDisplay ?? label ?? unit
+        }
         func q(_ id: String, _ code: String, _ display: String, _ profile: PGHDProfile, unit: String?, label: String? = nil,
                factor: Double = 1, loinc: [FHIRCoding] = []) {
             t["HKQuantityTypeIdentifier" + id] = PGHDMapping(code: code, display: display, profile: profile, loinc: loinc,
-                                                            unitCode: unit, unitDisplay: label ?? unit, factor: factor)
+                                                            unitCode: unit, unitDisplay: unitDisplay(profile, unit: unit, label: label, id: id),
+                                                            factor: factor)
         }
         func c(_ id: String, _ code: String, _ display: String, _ profile: PGHDProfile, unit: String? = nil, label: String? = nil) {
             t["HKCategoryTypeIdentifier" + id] = PGHDMapping(code: code, display: display, profile: profile, loinc: [],
-                                                            unitCode: unit, unitDisplay: label ?? unit, factor: 1)
+                                                            unitCode: unit, unitDisplay: unitDisplay(profile, unit: unit, label: label, id: id),
+                                                            factor: 1)
         }
         func l(_ code: String, _ display: String? = nil) -> FHIRCoding { FHIRCoding(PHRIG.loinc, code, display) }
 
@@ -143,7 +169,7 @@ public enum PGHDCodeMap {
         q("RunningSpeed", "runningSpeed", "Running speed", .activity, unit: "m/s", factor: 1 / 3.6)
 
         // Heart and vital signs
-        q("HeartRate", "heartRate", "Heart rate", .heartRate, unit: "/min", label: "beats/min", loinc: [l("8867-4", "Heart rate")])
+        q("HeartRate", "heartRate", "Heart rate", .heartRate, unit: "/min", loinc: [l("8867-4", "Heart rate")])
         q("RestingHeartRate", "restingHeartRate", "Resting heart rate", .vitalSigns, unit: "/min", label: "beats/min")
         q("WalkingHeartRateAverage", "walkingHeartRateAverage", "Walking heart rate average", .vitalSigns, unit: "/min", label: "beats/min")
         q("HeartRateVariabilitySDNN", "heartRateVariabilitySDNN", "Heart rate variability SDNN", .vitalSigns, unit: "ms",
@@ -161,9 +187,9 @@ public enum PGHDCodeMap {
         // Respiratory and other vitals
         q("OxygenSaturation", "oxygenSaturation", "Oxygen saturation", .oxygenSaturation, unit: "%",
           loinc: [l("2708-6", "Oxygen saturation in Arterial blood"), l("59408-5", "Oxygen saturation in Arterial blood by Pulse oximetry")])
-        q("RespiratoryRate", "respiratoryRate", "Respiratory rate", .respiratoryRate, unit: "/min", label: "breaths/min",
+        q("RespiratoryRate", "respiratoryRate", "Respiratory rate", .respiratoryRate, unit: "/min",
           loinc: [l("9279-1", "Respiratory rate")])
-        q("BodyTemperature", "bodyTemperature", "Body temperature", .bodyTemperature, unit: "Cel", label: "°C",
+        q("BodyTemperature", "bodyTemperature", "Body temperature", .bodyTemperature, unit: "Cel",
           loinc: [l("8310-5", "Body temperature")])
         q("AppleSleepingWristTemperature", "appleSleepingWristTemperature", "Apple sleeping wrist temperature", .vitalSigns, unit: "Cel", label: "°C")
         q("BloodGlucose", "bloodGlucose", "Blood glucose", .bloodGlucose, unit: "mmol/L", factor: 1 / 18.0182,

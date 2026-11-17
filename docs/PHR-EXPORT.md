@@ -36,6 +36,11 @@ where the IG's [code mapping table](https://build.fhir.org/ig/HL7/personal-healt
 lists one, and the UCUM unit the code system declares for that code. `Sources/HealthBridgeCore/PHR/PGHDCodeMap.swift`
 is the full table; a test checks that every type in the catalog has an entry.
 
+`Quantity.unit` is a human label (`beats/min`, `°C`) except where the profile fixes it: `pghd-heartrate` and
+`pghd-respiratoryrate` fix `/min`, `pghd-bodytemperature` `Cel`, `pghd-bodyweight` `kg`, `pghd-bodyheight` `cm`,
+`pghd-bmi` `kg/m2`, `pghd-oxygenSaturation` `%` and `pghd-blood-glucose` `mmol/L`. There the exporter writes exactly
+that text (`PGHDProfile.fixedUnitDisplay`), because a validator rejects anything else.
+
 | HealthKit | Profile | Category | LOINC | Unit | Note |
 | --- | --- | --- | --- | --- | --- |
 | HeartRate | `pghd-heartrate` | vital-signs | 8867-4 | `/min` | FHIR `heartrate` vital sign |

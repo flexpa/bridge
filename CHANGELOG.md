@@ -5,7 +5,12 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **PHR export units.** Heart rate, respiratory rate and body temperature wrote `beats/min`, `breaths/min` and `°C`
+  as `Quantity.unit`, but `pghd-heartrate`, `pghd-respiratoryrate` and `pghd-bodytemperature` fix that text to
+  `/min`, `/min` and `Cel`, so the HL7 FHIR Validator rejected every such observation. Profiles that fix a unit now
+  decide the text (`PGHDProfile.fixedUnitDisplay`), and a test holds every table entry to it.
 
 ## [0.1.0] — 2026-09-21
 

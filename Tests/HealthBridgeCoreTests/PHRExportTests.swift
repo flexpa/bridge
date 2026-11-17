@@ -122,6 +122,7 @@ final class PHRExportTests: XCTestCase {
         XCTAssertEqual(category(first), "vital-signs")
         XCTAssertEqual(coding(first, system: PHRIG.loinc)?["code"]?.stringValue, "8867-4")
         XCTAssertEqual(first["valueQuantity"]?["code"]?.stringValue, "/min")
+        XCTAssertEqual(first["valueQuantity"]?["unit"]?.stringValue, "/min", "pghd-heartrate fixes Quantity.unit")
         XCTAssertEqual(first["valueQuantity"]?["system"]?.stringValue, PHRIG.ucum)
         XCTAssertEqual(first["effectiveDateTime"]?.stringValue, ISO8601.string(from: ISO8601.exportDate(from: "2026-09-01 07:05:00 -0400")!))
         XCTAssertNil(first["effectivePeriod"])
@@ -413,6 +414,14 @@ final class PGHDMappingTests: XCTestCase {
         XCTAssertTrue(PGHDCodeMap.workoutActivityCodes.isSuperset(of: WorkoutActivityNames.names.values))
     }
 
+    func testEveryProfileThatFixesAUnitGetsExactlyThatText() {
+        let constrained = PGHDCodeMap.table.filter { $0.value.profile.fixedUnitDisplay != nil }
+        XCTAssertFalse(constrained.isEmpty)
+        for (id, m) in constrained {
+            XCTAssertEqual(m.unitDisplay, m.profile.fixedUnitDisplay, "\(id): \(m.profile.rawValue) fixes Quantity.unit")
+        }
+    }
+
     func testBloodPressureHalvesTakenTogetherBecomeOnePanel() async throws {
         let t = at("2026-05-01T08:00:00")
         let later = at("2026-05-02T08:00:00")
@@ -469,6 +478,7 @@ final class PGHDMappingTests: XCTestCase {
             HealthSample(type: "HKQuantityTypeIdentifierDietaryWater", start: t, end: t, value: 250, unit: "mL"),
             HealthSample(type: "HKQuantityTypeIdentifierWalkingStepLength", start: t, end: t, value: 72, unit: "cm"),
             HealthSample(type: "HKQuantityTypeIdentifierBodyTemperature", start: t, end: t, value: 36.6, unit: "degC"),
+            HealthSample(type: "HKQuantityTypeIdentifierRespiratoryRate", start: t, end: t, value: 15, unit: "count/min"),
             HealthSample(type: "HKQuantityTypeIdentifierBodyMassIndex", start: t, end: t, value: 22.1, unit: "count"),
             HealthSample(type: "HKQuantityTypeIdentifierEnvironmentalAudioExposure", start: t, end: e, value: 61, unit: "dBASPL"),
         ])
@@ -493,6 +503,9 @@ final class PGHDMappingTests: XCTestCase {
         XCTAssertEqual(try one("dietaryWater")["category"]?[0]?["coding"]?[0]?["code"]?.stringValue, "social-history")
         XCTAssertEqual(try one("walkingStepLength")["valueQuantity"]?["value"]?.doubleValue, 0.72)
         XCTAssertEqual(try one("bodyTemperature")["valueQuantity"]?["code"]?.stringValue, "Cel")
+        XCTAssertEqual(try one("bodyTemperature")["valueQuantity"]?["unit"]?.stringValue, "Cel", "pghd-bodytemperature fixes Quantity.unit")
+        XCTAssertEqual(try one("respiratoryRate")["valueQuantity"]?["unit"]?.stringValue, "/min", "pghd-respiratoryrate fixes Quantity.unit")
+        XCTAssertEqual(try one("respiratoryRate")["meta"]?["profile"]?[0]?.stringValue, PGHDProfile.respiratoryRate.url)
         XCTAssertEqual(try one("bodyTemperature")["code"]?["coding"]?[0]?["code"]?.stringValue, "8310-5")
         XCTAssertEqual(try one("bodyMassIndex")["valueQuantity"]?["code"]?.stringValue, "kg/m2")
         XCTAssertEqual(try one("environmentalAudioExposure")["valueQuantity"]?["code"]?.stringValue, "dB")
